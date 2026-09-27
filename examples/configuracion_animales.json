@@ -1,0 +1,58 @@
+{
+  "page": {
+    "width": 210.0,
+    "height": 297.0,
+    "unit": "mm",
+    "preset": "A4",
+    "margins": {
+      "top": 15.0,
+      "bottom": 15.0,
+      "left": 15.0,
+      "right": 15.0
+    }
+  },
+  "grid": {
+    "rows": 15,
+    "columns": 15,
+    "directions": {
+      "derecha": true,
+      "izquierda": false,
+      "abajo": true,
+      "arriba": false,
+      "diagonal_descendente": true,
+      "diagonal_ascendente": true,
+      "diagonal_descendente_inversa": false,
+      "diagonal_ascendente_inversa": false
+    },
+    "allow_reversed": true,
+    "allow_diagonals": true,
+    "allow_intersections": true,
+    "max_attempts": 120,
+    "seed": 2026
+  },
+  "layout": {
+    "title": "Animales",
+    "subtitle": "Encuentra todas las palabras",
+    "show_puzzle_number": true,
+    "grid_position": "centro",
+    "words_position": "abajo",
+    "font_name": "Arial",
+    "title_size": 18.0,
+    "subtitle_size": 10.0,
+    "grid_font_size": 11.0,
+    "words_font_size": 9.0,
+    "word_columns": 3,
+    "word_order": "alfabetico",
+    "cell_size": 18.0,
+    "line_width": 0.6,
+    "spacing": 8.0,
+    "auto_fit": true
+  },
+  "export": {
+    "include_solutions": true,
+    "order_mode": "soluciones_al_final",
+    "solution_style": "círculo",
+    "output_path": "output/libro_animales.pdf",
+    "selected_puzzles": "todas"
+  }
+}
