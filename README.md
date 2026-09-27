@@ -73,6 +73,8 @@ The executable will appear at `dist\WordSearchBookMaker.exe`. The equivalent man
 pyinstaller --noconfirm --clean --onefile --windowed --name WordSearchBookMaker main.py
 ```
 
+If you can´t open use another solution I do is `cd /d "C:\Users\alvip\not_alviii\Word Search - not_alviii"` (With your location of the file)
+And then to run it `.\.venv\Scripts\python.exe .\main.py`
 ## Troubleshooting
 
 - **`python` opens the Microsoft Store or does not exist:** install Python 3.12+ from python.org and check `py -3.12 --version`.
