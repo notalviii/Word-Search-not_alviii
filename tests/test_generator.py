@@ -41,3 +41,24 @@ class PuzzleGeneratorTests(unittest.TestCase):
     def test_disallowing_intersections_preserves_integrity(self) -> None:
         result = generate_puzzle(self._puzzle(), GridConfig(rows=15, columns=15, seed=7, allow_intersections=False, max_attempts=250))
         self.assertTrue(result.success, [error.display() for error in result.errors])
+    
+    def test_prefer_spacing_affects_placement(self) -> None:
+        # Generate with spacing preference
+        result_spacing = generate_puzzle(
+            self._puzzle(),
+            GridConfig(rows=15, columns=15, seed=5, prefer_spacing=True, max_attempts=250)
+        )
+        self.assertTrue(result_spacing.success, result_spacing.errors)
+        
+        # Generate without spacing preference
+        result_no_spacing = generate_puzzle(
+            self._puzzle(),
+            GridConfig(rows=15, columns=15, seed=5, prefer_spacing=False, max_attempts=250)
+        )
+        self.assertTrue(result_no_spacing.success, result_no_spacing.errors)
+        
+        # Both should be valid puzzles
+        assert result_spacing.puzzle is not None
+        assert result_no_spacing.puzzle is not None
+        self.assertEqual(validate_generated_puzzle(result_spacing.puzzle), [])
+        self.assertEqual(validate_generated_puzzle(result_no_spacing.puzzle), [])

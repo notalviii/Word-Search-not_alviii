@@ -10,6 +10,7 @@ from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen.canvas import Canvas
 
 from app.models import AppConfig, Puzzle, PuzzleBook, WordPlacement
+from app.i18n import LocaleManager
 from .fonts import resolve_pdf_font
 from .layout import (
     PageLayout,
@@ -31,6 +32,13 @@ def _chunks(items: list[Puzzle], size: int) -> list[list[Puzzle]]:
 
 
 class PdfBookRenderer:
+    def __init__(self) -> None:
+        self.locale = LocaleManager()
+    
+    def set_language(self, language: str) -> None:
+        """Set the language for PDF generation."""
+        self.locale.set_language(language)
+    
     def page_sequence(self, book: PuzzleBook, config: AppConfig) -> list[PageSpec]:
         puzzles = book.puzzles
         puzzle_pages: list[PageSpec] = [([puzzle], False) for puzzle in puzzles]
@@ -62,6 +70,7 @@ class PdfBookRenderer:
         progress: ProgressCallback | None = None,
         cancelled: CancelCheck | None = None,
     ) -> Path:
+        self.set_language(config.language)
         output = Path(path or config.export.output_path)
         output.parent.mkdir(parents=True, exist_ok=True)
         self.validate_layouts(book, config)
@@ -70,7 +79,7 @@ class PdfBookRenderer:
         if temporary.exists():
             temporary.unlink()
         canvas = Canvas(str(temporary), pagesize=config.page.size_points(), pageCompression=1)
-        canvas.setTitle(config.layout.title or "Sopa de letras")
+        canvas.setTitle(config.layout.title or self.locale.pdf("word_search"))
         try:
             for index, (puzzles, solution) in enumerate(sequence, start=1):
                 if cancelled and cancelled():
@@ -136,7 +145,10 @@ class PdfBookRenderer:
             canvas.setFont(font, layout.subtitle_size)
             canvas.drawCentredString(center_x, page.subtitle_y, layout.subtitle)
         if page.number_y is not None:
-            text = f"{'Solución — ' if solution else ''}Sopa {puzzle.number}"
+            if solution:
+                text = self.locale.pdf("solution_prefix", number=puzzle.number)
+            else:
+                text = self.locale.pdf("puzzle_number", number=puzzle.number)
             canvas.setFont(font, layout.subtitle_size)
             canvas.drawCentredString(center_x, page.number_y, text)
         self._draw_grid(canvas, puzzle, page, working, font)

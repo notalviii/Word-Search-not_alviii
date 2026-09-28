@@ -29,17 +29,37 @@ def _candidate_placements(word: str, config: GridConfig, rng: random.Random) -> 
 def _can_place(
     grid: list[list[str | None]], word: str, row: int, column: int,
     row_step: int, column_step: int, allow_intersections: bool,
-) -> tuple[bool, int]:
+) -> tuple[bool, int, int]:
+    """Check if a word can be placed and return (valid, crossings, adjacency_score)."""
     crossings = 0
+    adjacency_score = 0  # Lower is better (less crowded)
+    rows = len(grid)
+    columns = len(grid[0]) if grid else 0
+    
     for index, letter in enumerate(word):
-        current = grid[row + index * row_step][column + index * column_step]
+        current_row = row + index * row_step
+        current_col = column + index * column_step
+        current = grid[current_row][current_col]
+        
         if current is not None:
             if current != letter:
-                return False, 0
+                return False, 0, 0
             if not allow_intersections:
-                return False, 0
+                return False, 0, 0
             crossings += 1
-    return True, crossings
+        else:
+            # Check adjacency to existing letters (8-neighbor check)
+            # This helps avoid placing words too close to each other
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    if dr == 0 and dc == 0:
+                        continue
+                    nr, nc = current_row + dr, current_col + dc
+                    if 0 <= nr < rows and 0 <= nc < columns:
+                        if grid[nr][nc] is not None:
+                            adjacency_score += 1
+    
+    return True, crossings, adjacency_score
 
 
 def _write_word(
@@ -97,16 +117,22 @@ def generate_puzzle(puzzle: Puzzle, config: GridConfig, cancelled: CancelCheck =
         if index == len(ordered_words):
             return True
         word = ordered_words[index]
-        ranked: list[tuple[int, tuple[int, int, int, int]]] = []
+        ranked: list[tuple[int, int, tuple[int, int, int, int]]] = []
         for candidate in candidates[word.text]:
             row, column, row_step, column_step = candidate
-            valid, crossings = _can_place(grid, word.text, row, column, row_step, column_step, config.allow_intersections)
+            valid, crossings, adjacency = _can_place(grid, word.text, row, column, row_step, column_step, config.allow_intersections)
             if valid:
-                ranked.append((crossings, candidate))
-        # Priorizar cruces aumenta la densidad de colocaciones; aleatoriedad en
-        # empates por el orden ya barajado de candidates.
-        ranked.sort(key=lambda item: item[0], reverse=True)
-        for _, (row, column, row_step, column_step) in ranked:
+                # Prioritize placements with fewer adjacent cells (better spacing)
+                # while still preferring some crossings for density
+                ranked.append((adjacency, crossings, candidate))
+        # Sort based on prefer_spacing setting
+        if config.prefer_spacing:
+            # Prioritize spacing first, then crossings
+            ranked.sort(key=lambda item: (item[0], -item[1]))
+        else:
+            # Prioritize crossings first (original behavior), then spacing
+            ranked.sort(key=lambda item: (-item[1], item[0]))
+        for _, _, (row, column, row_step, column_step) in ranked:
             nodes += 1
             if nodes > max(config.max_attempts, 1) * 1_000:
                 return False

@@ -146,6 +146,7 @@ class GridConfig:
     allow_intersections: bool = True
     max_attempts: int = 120
     seed: int | None = None
+    prefer_spacing: bool = True  # If True, prefer less crowded placements
 
     def direction_steps(self) -> list[tuple[int, int]]:
         candidates = {
@@ -200,6 +201,8 @@ class AppConfig:
     grid: GridConfig = field(default_factory=GridConfig)
     layout: LayoutConfig = field(default_factory=LayoutConfig)
     export: ExportConfig = field(default_factory=ExportConfig)
+    language: str = "en"  # en | es
+    theme: str = "light"  # light | dark | soft | high_contrast
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -222,6 +225,7 @@ class AppConfig:
             allow_diagonals=bool(grid_raw.get("allow_diagonals", True)),
             allow_intersections=bool(grid_raw.get("allow_intersections", True)),
             max_attempts=int(grid_raw.get("max_attempts", 120)), seed=grid_raw.get("seed"),
+            prefer_spacing=bool(grid_raw.get("prefer_spacing", True)),
         )
         layout_raw = raw.get("layout", {})
         layout_defaults = asdict(LayoutConfig())
@@ -229,7 +233,9 @@ class AppConfig:
         export_raw = raw.get("export", {})
         export_defaults = asdict(ExportConfig())
         export = ExportConfig(**(export_defaults | export_raw))
-        return cls(page=page, grid=grid, layout=layout, export=export)
+        language = raw.get("language", "en")
+        theme = raw.get("theme", "light")
+        return cls(page=page, grid=grid, layout=layout, export=export, language=language, theme=theme)
 
     def selected_numbers(self, available: list[int]) -> list[int]:
         """Interpreta «todas» o una selección segura como 1-3,7,9-10."""

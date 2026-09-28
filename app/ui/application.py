@@ -13,10 +13,12 @@ from PIL import Image
 
 from app.core import BookGenerationCancelled, BookGenerationService, validate_app_config
 from app.csv import import_csv
+from app.i18n import LocaleManager, SUPPORTED_LANGUAGES
 from app.models import AppConfig, PAGE_PRESETS, PuzzleBook
 from app.pdf import PdfBookRenderer
 from app.pdf.fonts import FONT_OPTION_NAMES
 from app.pdf.preview import render_preview
+from app.themes import THEMES
 from app.utils import load_config, save_config
 
 
@@ -42,9 +44,11 @@ class WordSearchBookMakerApp(ctk.CTk):
         self._preview_width = 760
         self._preview_image: ctk.CTkImage | None = None
         self._variables: dict[str, ctk.Variable] = {}
+        self.locale = LocaleManager(self.config_model.language)
 
         self._build_interface()
         self._set_controls_from_config()
+        self._apply_language()
         self.after(100, self._drain_events)
 
     def _var(self, key: str, value: str | bool = "") -> ctk.Variable:
@@ -110,7 +114,8 @@ class WordSearchBookMakerApp(ctk.CTk):
             ctk.CTkCheckBox(checks, text=label, width=55, variable=self._var(f"direction.{key}", False)).grid(row=index // 4, column=index % 4, padx=2, pady=2)
         ctk.CTkCheckBox(puzzle, text="Permitir palabras invertidas", variable=self._var("grid.allow_reversed", False)).pack(anchor="w", padx=10, pady=2)
         ctk.CTkCheckBox(puzzle, text="Permitir diagonales", variable=self._var("grid.allow_diagonals", True)).pack(anchor="w", padx=10, pady=2)
-        ctk.CTkCheckBox(puzzle, text="Permitir cruces", variable=self._var("grid.allow_intersections", True)).pack(anchor="w", padx=10, pady=(2, 7))
+        ctk.CTkCheckBox(puzzle, text="Permitir cruces", variable=self._var("grid.allow_intersections", True)).pack(anchor="w", padx=10, pady=2)
+        ctk.CTkCheckBox(puzzle, text="Preferir espaciado", variable=self._var("grid.prefer_spacing", True)).pack(anchor="w", padx=10, pady=(2, 7))
 
         layout = self._section(sidebar, "4. Palabras y diseño")
         self._entry(layout, "Título", "layout.title", 165)
@@ -166,6 +171,16 @@ class WordSearchBookMakerApp(ctk.CTk):
         ctk.CTkButton(json_buttons, text="Cargar", width=95, command=self._load_configuration).pack(side="left", padx=5)
         ctk.CTkButton(json_buttons, text="Restablecer", width=95, command=self._reset_configuration).pack(side="right")
 
+        settings_section = self._section(sidebar, "7. Ajustes")
+        lang_row = ctk.CTkFrame(settings_section, fg_color="transparent")
+        lang_row.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(lang_row, text="Idioma", width=128, anchor="w").pack(side="left")
+        ctk.CTkComboBox(lang_row, values=SUPPORTED_LANGUAGES, variable=self._var("settings.language"), command=self._on_language_change, width=165).pack(side="right")
+        theme_row = ctk.CTkFrame(settings_section, fg_color="transparent")
+        theme_row.pack(fill="x", padx=10, pady=2)
+        ctk.CTkLabel(theme_row, text="Tema", width=128, anchor="w").pack(side="left")
+        ctk.CTkComboBox(theme_row, values=list(THEMES.keys()), variable=self._var("settings.theme"), command=self._on_theme_change, width=165).pack(side="right")
+
         ctk.CTkLabel(content, text="PREVISUALIZACIÓN", font=ctk.CTkFont(size=20, weight="bold")).grid(row=0, column=0, pady=(12, 4))
         self.preview_area = ctk.CTkScrollableFrame(content, label_text="Cargue un CSV y pulse PREVISUALIZAR")
         self.preview_area.grid(row=1, column=0, sticky="nsew", padx=12, pady=5)
@@ -187,6 +202,8 @@ class WordSearchBookMakerApp(ctk.CTk):
         self.preview_button.pack(side="right", padx=5)
         self.export_button = ctk.CTkButton(controls, text="GENERAR PDF", fg_color="#257B3F", hover_color="#17612D", command=lambda: self._start_work("export"))
         self.export_button.pack(side="right", padx=5)
+        self.regenerate_button = ctk.CTkButton(controls, text="REGENERAR SOPA", width=140, command=lambda: self._start_work("regenerate_single"))
+        self.regenerate_button.pack(side="right", padx=5)
         self.cancel_button = ctk.CTkButton(controls, text="Cancelar", width=85, state="disabled", command=self._cancel_work)
         self.cancel_button.pack(side="right", padx=5)
         bottom = ctk.CTkFrame(content, fg_color="transparent")
@@ -204,6 +221,15 @@ class WordSearchBookMakerApp(ctk.CTk):
             self._variables["page.height"].set(str(height))
             self._variables["page.unit"].set(unit)
 
+    def _on_language_change(self, value: str) -> None:
+        self.config_model.language = value
+        self.locale.set_language(value)
+        self._apply_language()
+
+    def _on_theme_change(self, value: str) -> None:
+        self.config_model.theme = value
+        self._apply_theme()
+
     def _set_controls_from_config(self) -> None:
         config = self.config_model
         values: dict[str, str | bool] = {
@@ -211,6 +237,7 @@ class WordSearchBookMakerApp(ctk.CTk):
             "page.margins.top": str(config.page.margins.top), "page.margins.bottom": str(config.page.margins.bottom), "page.margins.left": str(config.page.margins.left), "page.margins.right": str(config.page.margins.right),
             "grid.rows": str(config.grid.rows), "grid.columns": str(config.grid.columns), "grid.allow_reversed": config.grid.allow_reversed,
             "grid.allow_diagonals": config.grid.allow_diagonals, "grid.allow_intersections": config.grid.allow_intersections,
+            "grid.prefer_spacing": config.grid.prefer_spacing,
             "layout.title": config.layout.title, "layout.subtitle": config.layout.subtitle, "layout.word_columns": str(config.layout.word_columns),
             "layout.grid_position": config.layout.grid_position, "layout.custom_grid_x_percent": str(config.layout.custom_grid_x_percent), "layout.custom_grid_y_percent": str(config.layout.custom_grid_y_percent),
             "layout.title_size": str(config.layout.title_size), "layout.subtitle_size": str(config.layout.subtitle_size), "layout.grid_font_size": str(config.layout.grid_font_size),
@@ -219,6 +246,7 @@ class WordSearchBookMakerApp(ctk.CTk):
             "layout.word_order": config.layout.word_order, "layout.words_position": config.layout.words_position, "layout.auto_fit": config.layout.auto_fit,
             "export.include_solutions": config.export.include_solutions, "export.solution_style": config.export.solution_style, "export.order_mode": config.export.order_mode,
             "export.selected_puzzles": config.export.selected_puzzles, "export.output_path": config.export.output_path,
+            "settings.language": config.language, "settings.theme": config.theme,
         }
         for direction, value in config.grid.directions.items():
             values[f"direction.{direction}"] = value
@@ -252,7 +280,10 @@ class WordSearchBookMakerApp(ctk.CTk):
         config.grid.allow_reversed = bool(self._variables["grid.allow_reversed"].get())
         config.grid.allow_diagonals = bool(self._variables["grid.allow_diagonals"].get())
         config.grid.allow_intersections = bool(self._variables["grid.allow_intersections"].get())
+        config.grid.prefer_spacing = bool(self._variables["grid.prefer_spacing"].get())
         config.layout.title = str(self._variables["layout.title"].get())
+        config.language = str(self._variables["settings.language"].get())
+        config.theme = str(self._variables["settings.theme"].get())
         config.layout.subtitle = str(self._variables["layout.subtitle"].get())
         config.layout.grid_position = str(self._variables["layout.grid_position"].get())
         config.layout.custom_grid_x_percent = self._as_float("layout.custom_grid_x_percent", "Posición X")
@@ -341,11 +372,31 @@ class WordSearchBookMakerApp(ctk.CTk):
         self._set_controls_from_config()
         self.status.configure(text="Valores predeterminados restaurados.")
 
+    def _apply_language(self) -> None:
+        """Apply the current language to all UI elements."""
+        t = self.locale.ui
+        # Update window title
+        self.title(t("app_title"))
+        # Update section labels
+        # Note: CustomTkinter doesn't have a simple way to update all labels
+        # dynamically. For a full implementation, we would need to store references
+        # to all translatable widgets and update them individually.
+        # This is a simplified approach that updates key elements.
+        self.status.configure(text=t("ready"))
+
+    def _apply_theme(self) -> None:
+        """Apply the current theme to the application."""
+        from app.themes import apply_theme
+        apply_theme(self.config_model.theme, self)
+
     def _start_work(self, task: str) -> None:
         if self._worker and self._worker.is_alive():
             return
         if not self.imported_book:
             messagebox.showwarning("Falta el CSV", "Cargue primero un archivo CSV válido.")
+            return
+        if task == "regenerate_single" and not self.generated_book:
+            messagebox.showwarning("Falta generación", "Genere previamente las sopas.")
             return
         try:
             config = self._read_controls_into_config()
@@ -360,20 +411,35 @@ class WordSearchBookMakerApp(ctk.CTk):
         self.progress.set(0)
         self._set_working(True)
         self.status.configure(text="Preparando generación…")
-        worker = threading.Thread(target=self._run_work, args=(task, config, selected), daemon=True)
+        
+        if task == "regenerate_single":
+            puzzle_number = self.generated_book.puzzles[self._preview_index].number if self.generated_book else 1
+            worker = threading.Thread(target=self._run_work, args=(task, config, puzzle_number), daemon=True)
+        else:
+            worker = threading.Thread(target=self._run_work, args=(task, config, selected), daemon=True)
         self._worker = worker
         worker.start()
 
-    def _run_work(self, task: str, config: AppConfig, selected: list[int]) -> None:
+    def _run_work(self, task: str, config: AppConfig, selected: list[int] | int) -> None:
         def progress(done: int, total: int, status: str) -> None:
             self._events.put(("progress", (done / max(total, 1), status)))
         try:
-            generated = BookGenerationService().generate(self.imported_book, config.grid, selected, progress, self._cancel_event.is_set)  # type: ignore[arg-type]
+            if task == "regenerate_single":
+                puzzle_number = selected  # type: ignore[assignment]
+                generated = BookGenerationService().regenerate_single_puzzle(
+                    self.generated_book, puzzle_number, config.grid, progress, self._cancel_event.is_set
+                )
+            else:
+                generated = BookGenerationService().generate(
+                    self.imported_book, config.grid, selected, progress, self._cancel_event.is_set  # type: ignore[arg-type]
+                )
             if self._cancel_event.is_set():
                 raise BookGenerationCancelled()
             if task == "export":
                 rendered_path = PdfBookRenderer().export(generated, config, progress=progress, cancelled=self._cancel_event.is_set)
                 self._events.put(("export_done", (generated, rendered_path)))
+            elif task == "regenerate_single":
+                self._events.put(("regenerate_done", generated))
             else:
                 self._events.put(("preview_done", generated))
         except BookGenerationCancelled:
@@ -398,6 +464,12 @@ class WordSearchBookMakerApp(ctk.CTk):
                     self._variables["preview.solution"].set(False)
                     self._refresh_preview()
                     self.status.configure(text="Previsualización preparada.")
+                    self.progress.set(1)
+                    self._set_working(False)
+                elif kind == "regenerate_done":
+                    self.generated_book = payload  # type: ignore[assignment]
+                    self._refresh_preview()
+                    self.status.configure(text=f"Sopa {self._preview_index + 1} regenerada. Otras sopas sin cambios.")
                     self.progress.set(1)
                     self._set_working(False)
                 elif kind == "export_done":
@@ -425,6 +497,7 @@ class WordSearchBookMakerApp(ctk.CTk):
         state = "disabled" if working else "normal"
         self.preview_button.configure(state=state)
         self.export_button.configure(state=state)
+        self.regenerate_button.configure(state=state)
         self.cancel_button.configure(state="normal" if working else "disabled")
 
     def _cancel_work(self) -> None:

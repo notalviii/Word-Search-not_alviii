@@ -9,12 +9,21 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 
 from app.models import AppConfig, Puzzle, word_list_rows
+from app.i18n import LocaleManager
 
 
 SOLUTION_COLUMNS = 2
 SOLUTION_ROWS = 2
 SOLUTIONS_PER_PAGE = SOLUTION_COLUMNS * SOLUTION_ROWS
 SOLUTION_GUTTER = 10.0
+
+# Global locale manager for PDF layout
+_locale = LocaleManager()
+
+
+def set_pdf_language(language: str) -> None:
+    """Set the language for PDF layout error messages."""
+    _locale.set_language(language)
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,7 +58,7 @@ def page_content_rect(config: AppConfig) -> Rect:
     top, bottom, left, right = config.page.margins.as_points(config.page.unit)
     content = Rect(left, bottom, page_width - left - right, page_height - top - bottom)
     if content.width <= 0 or content.height <= 0:
-        raise ValueError("Los márgenes no dejan espacio útil en la página.")
+        raise ValueError(_locale.pdf("no_margin_space"))
     return content
 
 
@@ -60,7 +69,7 @@ def solution_cell_rects(config: AppConfig, occupied: int = SOLUTIONS_PER_PAGE) -
     cell_width = (content.width - gutter) / SOLUTION_COLUMNS
     cell_height = (content.height - gutter) / SOLUTION_ROWS
     if cell_width <= 8 or cell_height <= 8:
-        raise ValueError("No hay espacio suficiente para cuatro soluciones en la página.")
+        raise ValueError(_locale.pdf("no_space_solution"))
     cells: list[Rect] = []
     count = max(0, min(int(occupied), SOLUTIONS_PER_PAGE))
     for index in range(count):
@@ -75,9 +84,9 @@ def solution_cell_rects(config: AppConfig, occupied: int = SOLUTIONS_PER_PAGE) -
 def _validate_fits(content: Rect, grid_width: float, grid_height: float, words_height: float, header_height: float, spacing: float) -> None:
     required_height = header_height + grid_height + words_height + (2 * spacing if words_height else spacing)
     if required_height > content.height + 0.001:
-        raise ValueError("No hay espacio vertical suficiente para la cuadrícula y la lista de palabras.")
+        raise ValueError(_locale.pdf("no_space_vertical"))
     if grid_width > content.width + 0.001:
-        raise ValueError("No hay espacio horizontal suficiente para la cuadrícula.")
+        raise ValueError(_locale.pdf("no_space_horizontal"))
 
 
 def compact_layout_config(config: AppConfig, bounds: Rect) -> AppConfig:
@@ -99,6 +108,7 @@ def compact_layout_config(config: AppConfig, bounds: Rect) -> AppConfig:
 
 def calculate_layout(puzzle: Puzzle, config: AppConfig, bounds: Rect | None = None) -> PageLayout:
     """Calcula una página (o un recuadro) sin solapamientos para abajo, arriba, izquierda o derecha."""
+    set_pdf_language(config.language)
     if puzzle.grid is None:
         raise ValueError("No es posible crear un layout para una sopa sin generar.")
     page_width, page_height = config.page.size_points()
